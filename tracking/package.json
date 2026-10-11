@@ -1,0 +1,12 @@
+{
+  "name": "ip-checkin",
+  "version": "1.0.0",
+  "description": "ระบบเช็กอินตำแหน่งทีม (เก็บ IP + พิกัด แบบขอความยินยอม)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แดชบอร์ดแอดมิน</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#1a222c; --panel-2:#222d3a; --fg:#e6edf3;
+    --muted:#8b98a9; --line:#2a3542; --accent:#4ea1ff; --accent-2:#3ddc97;
+    --danger:#ff5c5c; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",Roboto,sans-serif;
+    background:var(--bg);color:var(--fg);line-height:1.5}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent-2);
+    box-shadow:0 0 0 4px rgba(61,220,151,.18)}
+  .live{font-size:.78rem;color:var(--muted)}
+  main{max-width:1100px;margin:0 auto;padding:24px 20px}
+  .admin-head{display:flex;justify-content:space-between;align-items:center;gap:14px;
+    margin:0 0 18px;flex-wrap:wrap}
+  .admin-head h2{margin:0;font-size:1.3rem}
+  .stats{display:flex;gap:10px;flex-wrap:wrap}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:96px}
+  .stat .n{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .actions{display:flex;gap:8px}
+  .btn-ghost{background:var(--panel-2);border:1px solid var(--line);color:var(--fg);
+    padding:9px 14px;border-radius:9px;cursor:pointer;font-weight:600;font-size:.85rem;font-family:inherit}
+  .btn-ghost:hover{border-color:var(--accent)}
+  .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+  #map{height:380px;width:100%;border-radius:var(--radius);border:1px solid var(--line);margin:0 0 20px}
+  .table-wrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .table-scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  thead th{background:var(--panel-2);text-align:left;padding:12px 14px;color:var(--muted);
+    font-weight:600;text-transform:uppercase;letter-spacing:.03em;font-size:.72rem;white-space:nowrap}
+  tbody td{padding:12px 14px;border-top:1px solid var(--line);vertical-align:top}
+  tbody tr:hover{background:var(--panel-2)}
+  td.coord{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .region-badge{display:inline-block;background:rgba(78,161,255,.14);color:var(--accent);
+    padding:3px 9px;border-radius:20px;font-size:.78rem;font-weight:600}
+  .locate-link{color:var(--accent);cursor:pointer;font-weight:600}
+  .empty{padding:48px 20px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span> แดชบอร์ดแอดมิน</div>
+    <div class="live" id="live">อัปเดตอัตโนมัติทุก 5 วินาที</div>
+  </header>
+
+  <main>
+    <div class="admin-head">
+      <h2>ตำแหน่งทีม</h2>
+      <div class="stats">
+        <div class="stat"><div class="n" id="statTotal">0</div><div class="l">เช็กอินทั้งหมด</div></div>
+        <div class="stat"><div class="n" id="statPeople">0</div><div class="l">คน/รหัส</div></div>
+        <div class="stat"><div class="n" id="statRegions">0</div><div class="l">ภูมิภาค</div></div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="admin-head">
+      <h2 style="font-size:1.05rem">รายการเช็กอิน</h2>
+      <div class="actions">
+        <button class="btn-ghost" onclick="loadData()">รีเฟรช</button>
+        <button class="btn-ghost" onclick="exportCSV()">ส่งออก CSV</button>
+        <button class="btn-ghost danger" onclick="clearAll()">ล้างข้อมูลทั้งหมด</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th>เวลา</th><th>IP</th>
+            <th>Lat, Long</th><th>แม่นยำ</th><th>ภูมิภาค</th><th></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="empty" class="empty">ยังไม่มีการเช็กอิน</div>
+    </div>
+  </main>
+
+<script>
+let map=null, markers=[], data=[];
+
+function initMap(){
+  if(map) return;
+  map=L.map('map').setView([15,40],2);
+  // แผนที่ Esri (ไม่ต้องใช้ API key) — ถ้าจะเปลี่ยนเป็น Google Maps บอกได้
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    {attribution:'Tiles © Esri',maxZoom:16}).addTo(map);
+}
+
+async function loadData(){
+  try{
+    const res=await fetch('/api/checkins',{cache:'no-store'});
+    data=await res.json();
+    render();
+    document.getElementById('live').textContent='อัปเดตล่าสุด '+new Date().toLocaleTimeString('th-TH');
+  }catch(e){
+    document.getElementById('live').textContent='เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — รัน node server.js หรือยัง?';
+  }
+}
+
+function render(){
+  initMap();
+  document.getElementById('statTotal').textContent=data.length;
+  document.getElementById('statPeople').textContent=new Set(data.map(r=>r.name)).size;
+  document.getElementById('statRegions').textContent=new Set(data.map(r=>r.region)).size;
+
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  const pts=[];
+  data.forEach(r=>{
+    const m=L.marker([r.lat,r.lng]).addTo(map).bindPopup(
+      '<b>'+esc(r.name)+'</b><br>'+r.region+'<br>'+
+      r.lat.toFixed(5)+', '+r.lng.toFixed(5)+'<br>IP: '+esc(r.ip)+'<br><small>'+fmt(r.ts)+'</small>');
+    markers.push(m); pts.push([r.lat,r.lng]);
+  });
+  if(pts.length){ try{ map.fitBounds(pts,{padding:[40,40],maxZoom:10}); }catch(e){} }
+  setTimeout(()=>map.invalidateSize(),80);
+
+  const tb=document.getElementById('rows'), empty=document.getElementById('empty');
+  tb.innerHTML='';
+  if(!data.length){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+fmt(r.ts)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.ip)+'</td>'+
+      '<td class="coord">'+r.lat.toFixed(5)+', '+r.lng.toFixed(5)+'</td>'+
+      '<td>± '+r.acc+' ม.</td><td><span class="region-badge">'+r.region+'</span></td>'+
+      '<td><span class="locate-link">ดูบนแผนที่</span></td>';
+    tr.querySelector('.locate-link').onclick=()=>{
+      map.setView([r.lat,r.lng],14);
+      document.getElementById('map').scrollIntoView({behavior:'smooth'});
+    };
+    tb.appendChild(tr);
+  });
+}
+
+function exportCSV(){
+  if(!data.length){ alert('ยังไม่มีข้อมูล'); return; }
+  const head=['เวลา','IP','Latitude','Longitude','ความแม่นยำ(ม.)','ภูมิภาค'];
+  const rows=data.map(r=>[fmt(r.ts),r.ip,r.lat,r.lng,r.acc,r.region].map(cell).join(','));
+  const csv='﻿'+head.join(',')+'\n'+rows.join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='checkins.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+function cell(v){ v=String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+
+async function clearAll(){
+  if(!confirm('ล้างข้อมูลเช็กอินทั้งหมด? ย้อนกลับไม่ได้')) return;
+  await fetch('/api/clear',{method:'POST'});
+  loadData();
+}
+
+function fmt(iso){ return new Date(iso).toLocaleString('th-TH',
+  {year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+loadData();
+setInterval(loadData, 5000);
+</script>
+</body>
+</html>
